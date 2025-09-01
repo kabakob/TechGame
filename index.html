@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เกมจับคู่: เทคโนโลยีแห่งอนาคต</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: #f0fdf4; /* Light Green */
+            background-image: radial-gradient(#bbf7d0 1px, transparent 1px); /* Green dots */
+            background-size: 20px 20px;
+        }
+        .drop-zone {
+            transition: background-color 0.3s, box-shadow 0.3s;
+            min-height: 100px;
+        }
+        .drop-zone.drag-over {
+            background-color: #dcfce7; /* Lighter Green */
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
+        }
+        .draggable-card {
+            cursor: grab;
+            transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s;
+        }
+        .draggable-card:hover {
+            transform: translateY(-4px) scale(1.03);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .draggable-card.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+            transform: scale(1.05);
+        }
+        .correct-drop {
+            background-color: #dcfce7 !important;
+            border-color: #22c55e !important;
+        }
+        #result-modal, #score-feedback {
+            transition: all 0.5s ease-in-out;
+        }
+        .fade-in {
+            opacity: 1 !important;
+        }
+        .fade-out {
+            opacity: 0 !important;
+            pointer-events: none;
+        }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+          20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        .animate-shake {
+          animation: shake 0.5s ease-in-out;
+        }
+        #score-feedback.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1.2);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-green-900">เกมจับคู่: เทคโนโลยีแห่งอนาคต</h1>
+            <p class="text-green-700 mt-2">ลาก "ตัวอย่างการใช้งาน" ไปวางในกล่อง "เทคโนโลยี" ที่ถูกต้อง</p>
+            <div class="mt-4 flex justify-center items-center space-x-8 text-lg font-medium text-green-800 bg-white/60 backdrop-blur-sm py-2 px-6 rounded-full shadow-sm">
+                <div><strong>คะแนน:</strong> <span id="score-display">0</span></div>
+                <div><strong>เวลา:</strong> <span id="timer-display">00:00</span></div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Column 1: Drop Zones -->
+            <div class="lg:col-span-2 space-y-4">
+                <h2 class="text-xl font-bold text-green-800 text-center">เทคโนโลยี</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="drop-zones-container">
+                    <!-- Drop zones will be inserted here by JS -->
+                </div>
+            </div>
+
+            <!-- Column 2: Draggable Cards -->
+            <div class="bg-white/70 backdrop-blur-sm p-4 rounded-xl shadow-lg">
+                <h2 class="text-xl font-bold text-green-800 text-center mb-4">ตัวอย่างการใช้งาน</h2>
+                <div id="draggable-cards-container" class="space-y-3 max-h-[75vh] overflow-y-auto pr-2">
+                    <!-- Draggable cards will be inserted here by JS -->
+                </div>
+            </div>
+        </div>
+        
+        <footer class="text-center mt-8">
+            <button id="reset-button" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                เริ่มใหม่
+            </button>
+        </footer>
+    </div>
+    
+    <!-- Result Modal -->
+    <div id="result-modal" class="fade-out fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm w-full transform transition-transform scale-95" id="modal-content">
+            <h2 id="modal-title" class="text-3xl font-bold mb-4 text-green-800">ยินดีด้วย!</h2>
+            <div id="modal-message" class="text-green-700 mb-6 text-lg space-y-2">
+                <p>คุณจับคู่ทั้งหมดสำเร็จ!</p>
+                <p id="final-time" class="font-semibold"></p>
+                <p id="final-score" class="font-semibold"></p>
+            </div>
+            <button id="modal-close-button" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                เล่นอีกครั้ง
+            </button>
+        </div>
+    </div>
+
+    <!-- Score Feedback Popup -->
+    <div id="score-feedback" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-6xl font-bold opacity-0 scale-50 pointer-events-none z-50 drop-shadow-lg"></div>
+
+
+    <script>
+        const gameData = {
+            technologies: [
+                { id: 'speech', name: 'เทคโนโลยีเสียงพูด (Speech Technology)' },
+                { id: 'ai', name: 'ปัญญาประดิษฐ์ (AI)' },
+                { id: 'bio', name: 'เทคโนโลยีชีวภาพ (Biotechnology)' },
+                { id: 'ar', name: 'เทคโนโลยีโลกเสมือนผสานโลกแห่งความจริง (AR)' },
+                { id: 'vr', name: 'เทคโนโลยีประสบการณ์เสมือนจริง (VR)' },
+                { id: 'quantum', name: 'เทคโนโลยีการประมวลผลแบบควอนตัม (Quantum Computing)' },
+                { id: 'iot', name: 'เทคโนโลยีอินเทอร์เน็ตในทุกสิ่ง (IoT)' },
+                { id: 'bigdata', name: 'ลักษณะของ Big Data' }
+            ],
+            applications: [
+                { id: 'app1', text: 'สั่งเปิด-ปิดไฟในบ้านผ่านแอปพลิเคชันบนสมาร์ทโฟน', techId: 'iot' },
+                { id: 'app2', text: 'ใช้โทรศัพท์มือถือส่องไปที่แผ่นพับโฆษณา แล้วปรากฏเป็นโมเดลสินค้า 3 มิติ', techId: 'ar' },
+                { id: 'app3', text: 'สร้างแตงโมสีเหลืองและองุ่นไร้เมล็ดจากการผสมข้ามสายพันธุ์', techId: 'bio' },
+                { id: 'app4', text: 'ระบบแปลงข้อความจากหนังสือให้กลายเป็นเสียงอ่านสำหรับผู้พิการทางสายตา', techId: 'speech' },
+                { id: 'app5', text: 'พัฒนายารักษาโรคที่สามารถคำนวณและออกแบบให้เหมาะกับ DNA ของแต่ละบุคคลได้', techId: 'quantum' },
+                { id: 'app6', text: 'ใช้กล้องมือถือส่องโลกจริงเพื่อตามหาและจับตัวละครเสมือนในเกม', techId: 'ar' },
+                { id: 'app7', text: 'สวมใส่อุปกรณ์แว่นตาเพื่อเข้าไปอยู่ในห้องเรียนจำลองเสมือนจริง', techId: 'vr' },
+                { id: 'app8', text: 'ระบบคอมพิวเตอร์ที่เรียนรู้ได้เหมือนเด็ก เช่น เมื่อสัมผัสของร้อนแล้วจะจดจำและไม่ทำอีก', techId: 'ai' },
+                { id: 'app9', text: 'ใช้ในการฝึกผ่าตัดทางการแพทย์ หรือฝึกขับเครื่องบินในห้องจำลองสถานการณ์', techId: 'vr' },
+                { id: 'app10', text: 'ระบบควบคุมอุปกรณ์อัตโนมัติในบ้านด้วยคำสั่งเสียง', techId: 'speech' },
+                { id: 'app11', text: 'เพิ่มความแม่นยำในการพยากรณ์อากาศเพื่อเตือนภัยพิบัติล่วงหน้า', techId: 'quantum' },
+                { id: 'app12', text: 'การผลิตยาปฏิชีวนะและเซรุ่มแก้พิษงู', techId: 'bio' },
+                { id: 'app13', text: 'Volume: ข้อมูลที่มีปริมาณมหาศาล', techId: 'bigdata' },
+                { id: 'app14', text: 'Velocity: ข้อมูลการสตรีมวิดีโอที่ต้องประมวลผลแบบเรียลไทม์', techId: 'bigdata' },
+                { id: 'app15', text: 'Variety: ข้อมูลหลากหลายรูปแบบทั้งตัวอักษร, ภาพ, และเสียง', techId: 'bigdata' },
+                { id: 'app16', text: 'ระบบสั่งการด้วยเสียงในรถยนต์', techId: 'speech' },
+                { id: 'app17', text: 'การแนะนำสินค้าที่น่าจะสนใจในเว็บชอปปิงออนไลน์', techId: 'ai' },
+                { id: 'app18', text: 'การใช้ปุ๋ยหมักชีวภาพเพื่อปรับปรุงคุณภาพดิน', techId: 'bio' },
+                { id: 'app19', text: 'แอปพลิเคชันลองวางเฟอร์นิเจอร์ในห้องผ่านกล้องมือถือ', techId: 'ar' },
+                { id: 'app20', text: 'การเข้าร่วมประชุมทางธุรกิจในห้องประชุมเสมือนจริง', techId: 'vr' },
+                { id: 'app21', text: 'พัฒนาระบบรักษาความปลอดภัยออนไลน์ที่ถอดรหัสได้ยาก', techId: 'quantum' },
+                { id: 'app22', text: 'นาฬิกาอัจฉริยะที่เชื่อมต่อกับโทรศัพท์มือถือ', techId: 'iot' }
+            ]
+        };
+
+        const dropZonesContainer = document.getElementById('drop-zones-container');
+        const draggableCardsContainer = document.getElementById('draggable-cards-container');
+        const resetButton = document.getElementById('reset-button');
+        const resultModal = document.getElementById('result-modal');
+        const modalContent = document.getElementById('modal-content');
+        const modalCloseButton = document.getElementById('modal-close-button');
+        const scoreDisplay = document.getElementById('score-display');
+        const timerDisplay = document.getElementById('timer-display');
+        const scoreFeedback = document.getElementById('score-feedback');
+        
+        let score = 0;
+        let timerInterval;
+        let startTime;
+        let totalCorrect = 0;
+        let totalApplications = 0;
+        const incorrectlyDropped = new Set();
+        let feedbackTimeout;
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function setupGame() {
+            totalCorrect = 0;
+            score = 0;
+            scoreDisplay.textContent = '0';
+            timerDisplay.textContent = '00:00';
+            clearInterval(timerInterval);
+            incorrectlyDropped.clear();
+
+            totalApplications = gameData.applications.length;
+            dropZonesContainer.innerHTML = '';
+            draggableCardsContainer.innerHTML = '';
+
+            const sortedTechnologies = [...gameData.technologies].sort((a,b) => a.name.localeCompare(b.name, 'th'));
+            sortedTechnologies.forEach(tech => {
+                const zone = document.createElement('div');
+                zone.id = tech.id;
+                zone.dataset.techId = tech.id;
+                zone.className = 'drop-zone bg-white p-4 rounded-xl shadow-md border-2 border-dashed border-green-200 flex flex-col items-center';
+                zone.innerHTML = `<h3 class="font-bold text-center text-green-800 mb-2">${tech.name}</h3><div class="w-full space-y-2 flex-grow"></div>`;
+                dropZonesContainer.appendChild(zone);
+            });
+
+            const shuffledApplications = [...gameData.applications];
+            shuffleArray(shuffledApplications);
+            
+            shuffledApplications.forEach(app => {
+                const card = document.createElement('div');
+                card.id = app.id;
+                card.draggable = true;
+                card.dataset.techId = app.techId;
+                card.className = 'draggable-card bg-white p-3 rounded-lg shadow-sm border border-gray-200 text-green-900';
+                card.textContent = app.text;
+                draggableCardsContainer.appendChild(card);
+            });
+            
+            addEventListeners();
+            startTimer();
+        }
+
+        function startTimer() {
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function updateTimer() {
+            const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
+            const seconds = (elapsedTime % 60).toString().padStart(2, '0');
+            timerDisplay.textContent = `${minutes}:${seconds}`;
+        }
+
+        function showScoreFeedback(text, type) {
+            clearTimeout(feedbackTimeout);
+            scoreFeedback.textContent = text;
+            scoreFeedback.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-6xl font-bold opacity-0 scale-50 pointer-events-none z-50 drop-shadow-lg'; // Reset classes
+            
+            if (type === 'plus') {
+                scoreFeedback.classList.add('text-green-500');
+            } else {
+                scoreFeedback.classList.add('text-red-500');
+            }
+
+            requestAnimationFrame(() => {
+                scoreFeedback.classList.add('show');
+            });
+            
+            feedbackTimeout = setTimeout(() => {
+                scoreFeedback.classList.remove('show');
+            }, 800);
+        }
+
+        function addEventListeners() {
+            const draggables = document.querySelectorAll('.draggable-card');
+            const dropZones = document.querySelectorAll('.drop-zone');
+
+            draggables.forEach(draggable => {
+                draggable.addEventListener('dragstart', () => {
+                    draggable.classList.add('dragging');
+                });
+                draggable.addEventListener('dragend', () => {
+                    draggable.classList.remove('dragging');
+                });
+            });
+
+            dropZones.forEach(zone => {
+                zone.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    zone.classList.add('drag-over');
+                });
+                zone.addEventListener('dragleave', () => {
+                    zone.classList.remove('drag-over');
+                });
+                zone.addEventListener('drop', e => {
+                    e.preventDefault();
+                    zone.classList.remove('drag-over');
+                    const draggingCard = document.querySelector('.dragging');
+                    if (draggingCard) {
+                        if (zone.dataset.techId === draggingCard.dataset.techId) {
+                            if (!incorrectlyDropped.has(draggingCard.id)) {
+                                score++;
+                            }
+                            showScoreFeedback('+1', 'plus');
+                            handleCorrectDrop(zone, draggingCard);
+                        } else {
+                            score--;
+                            incorrectlyDropped.add(draggingCard.id);
+                            showScoreFeedback('-1', 'minus');
+                            zone.classList.add('border-red-500', 'animate-shake');
+                            setTimeout(() => zone.classList.remove('border-red-500', 'animate-shake'), 500);
+                        }
+                        scoreDisplay.textContent = score;
+                    }
+                });
+            });
+        }
+        
+        function handleCorrectDrop(zone, card) {
+            card.draggable = false;
+            card.classList.remove('draggable-card');
+            card.classList.add('correct-drop');
+            card.style.cursor = 'default';
+            const contentDiv = zone.querySelector('div');
+            contentDiv.appendChild(card);
+            totalCorrect++;
+            checkWinCondition();
+        }
+        
+        function checkWinCondition() {
+            if (totalCorrect === totalApplications) {
+                clearInterval(timerInterval);
+                const finalTimeText = timerDisplay.textContent;
+                showModal(score, finalTimeText);
+            }
+        }
+
+        function showModal(finalScore, finalTime) {
+            document.getElementById('final-time').textContent = `เวลาที่ใช้: ${finalTime}`;
+            document.getElementById('final-score').textContent = `คะแนนรวม: ${finalScore}`;
+            resultModal.classList.remove('fade-out');
+            resultModal.classList.add('fade-in');
+            setTimeout(() => {
+                modalContent.style.transform = 'scale(1)';
+            }, 10);
+        }
+
+
+
+        function hideModal() {
+            modalContent.style.transform = 'scale(0.95)';
+            resultModal.classList.remove('fade-in');
+            resultModal.classList.add('fade-out');
+        }
+
+        resetButton.addEventListener('click', setupGame);
+        modalCloseButton.addEventListener('click', () => {
+            hideModal();
+            setupGame();
+        });
+
+        document.addEventListener('DOMContentLoaded', setupGame);
+    </script>
+</body>
+</html>
+
